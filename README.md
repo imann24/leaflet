@@ -20,6 +20,7 @@ The desktop app initially opens `~/Sync/Journal`. Use the folder button or **Cmd
 pnpm dev             # Browser preview with fictional sample entries
 pnpm build           # Typecheck and build the frontend
 pnpm tauri build     # Package the desktop application
+pnpm icons:macos     # Regenerate padded macOS icons from public/leaflet.svg
 pnpm test            # Entry parsing and search tests
 pnpm test:e2e        # Browser interaction tests
 pnpm format:check

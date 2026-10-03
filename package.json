@@ -13,7 +13,8 @@
     "check": "tsc --noEmit",
     "desktop": "tauri dev",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "icons:macos": "node scripts/generate-macos-icons.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
