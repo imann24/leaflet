@@ -236,3 +236,30 @@ test('hides skipped exercise banners only in rendered mode', async ({
   await page.getByRole('button', { name: 'Show original text' }).click();
   await expect(page.locator('.raw-text')).toContainText('3x3 >>> SKIPPED');
 });
+
+test('quick search submission uses the new query and resets a previous selection', async ({
+  page,
+}) => {
+  await page.keyboard.press('Meta+k');
+  const search = page.getByRole('textbox', {
+    name: 'Search entries and commands',
+  });
+  await search.press('ArrowDown');
+  await search.press('ArrowDown');
+  // Intentionally submit without waiting for a result: this used to run a stale command.
+  await search.fill('9.30.26');
+  await search.press('Enter');
+  await expect(
+    page.getByRole('heading', { name: 'September 30', exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press('Meta+k');
+  await search.fill('no matching journal entry');
+  await search.press('ArrowDown');
+  await search.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await search.fill('>open calendar');
+  await search.press('Enter');
+  await expect(
+    page.getByRole('heading', { name: 'A life in days.' }),
+  ).toBeVisible();
+});

@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, FileText, ArrowUpRight, Command } from 'lucide-react';
 import { searchEntries, type Entry } from '../lib/journal';
 export interface QuickCommand {
@@ -20,7 +20,6 @@ export function CommandPalette({
 }) {
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
-  const deferred = useDeferredValue(query);
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const results = useMemo(() => {
@@ -28,13 +27,13 @@ export function CommandPalette({
       .filter((c) =>
         c.label
           .toLowerCase()
-          .includes(deferred.replace(/^>/, '').trim().toLowerCase()),
+          .includes(query.replace(/^>/, '').trim().toLowerCase()),
       )
       .map((c) => ({ ...c, kind: 'command' as const }));
-    const entryMatches = deferred.startsWith('>')
+    const entryMatches = query.startsWith('>')
       ? []
-      : (deferred.trim()
-          ? searchEntries(entries, deferred).slice(0, 40)
+      : (query.trim()
+          ? searchEntries(entries, query).slice(0, 40)
           : [...entries].reverse().slice(0, 5)
         ).map((e) => ({
           id: e.id,
@@ -44,14 +43,13 @@ export function CommandPalette({
           kind: 'entry' as const,
         }));
     return [...commandMatches, ...entryMatches];
-  }, [deferred, entries, commands, onSelect]);
+  }, [query, entries, commands, onSelect]);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     dialog.current?.showModal();
     input.current?.focus();
     return () => previous?.focus();
   }, []);
-  useEffect(() => setIndex(0), [deferred]);
   useEffect(() => {
     dialog.current
       ?.querySelector(`[data-index="${index}"]`)
@@ -74,11 +72,16 @@ export function CommandPalette({
           aria-label="Search entries and commands"
           placeholder="Find an entry, a memory, or a command…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            // Keep the query, visible results, and keyboard selection in one update.
+            // Deferring results lets a quick Enter run an action from the old query.
+            setQuery(e.target.value);
+            setIndex(0);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') {
               e.preventDefault();
-              setIndex((i) => Math.min(i + 1, results.length - 1));
+              setIndex((i) => Math.max(0, Math.min(i + 1, results.length - 1)));
             }
             if (e.key === 'ArrowUp') {
               e.preventDefault();
