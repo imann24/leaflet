@@ -1,0 +1,147 @@
+:root {
+  --gratitude-bg: #f5f1e5;
+  --gratitude-accent: #89702f;
+  --gratitude-border: #e7dec3;
+  --forgiveness-bg: #edf1e9;
+  --forgiveness-accent: #526e51;
+  --forgiveness-border: #d8e2d1;
+  --curiosity-bg: #eeeff5;
+  --curiosity-accent: #646d91;
+  --curiosity-border: #dcdfeb;
+}
+[data-theme='dark'] {
+  --gratitude-bg: #2c2b20;
+  --gratitude-accent: #d4bd7e;
+  --gratitude-border: #484332;
+  --forgiveness-bg: #252f24;
+  --forgiveness-accent: #adc89b;
+  --forgiveness-border: #3b4c36;
+  --curiosity-bg: #282b34;
+  --curiosity-accent: #b6bedf;
+  --curiosity-border: #3e455c;
+}
+.prose .reflection {
+  margin: 1.8em 0 2.2em;
+}
+.prose > .reflection:first-child {
+  margin-top: 0;
+}
+.reflection-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font:
+    500 9px/1.5 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  letter-spacing: 1.7px;
+  color: var(--muted);
+}
+.reflection-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.prose .reflection-heading h2 {
+  margin: 9px 0 21px;
+  font-size: 1.65em;
+  font-weight: 400;
+  letter-spacing: -0.7px;
+}
+.reflection-title-row > span {
+  font:
+    11px/1.5 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.reflection-introduction {
+  margin-bottom: 1.3em;
+}
+.reflection-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.reflection-gratitude {
+  --reflection-bg: var(--gratitude-bg);
+  --reflection-accent: var(--gratitude-accent);
+  --reflection-border: var(--gratitude-border);
+}
+.reflection-forgiveness {
+  --reflection-bg: var(--forgiveness-bg);
+  --reflection-accent: var(--forgiveness-accent);
+  --reflection-border: var(--forgiveness-border);
+}
+.reflection-curiosity {
+  --reflection-bg: var(--curiosity-bg);
+  --reflection-accent: var(--curiosity-accent);
+  --reflection-border: var(--curiosity-border);
+}
+.reflection-card {
+  padding: 19px 22px 20px;
+  border: 1px solid var(--reflection-border);
+  background: var(--reflection-bg);
+  border-radius: 9px;
+}
+.reflection-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--reflection-accent);
+}
+.reflection-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 29px;
+  border: 1px solid var(--reflection-border);
+  border-radius: 50%;
+}
+.prose .reflection-card h3 {
+  margin: 0;
+  font-size: 1.12em;
+  font-weight: 400;
+}
+.prose .reflection-card ol {
+  list-style: none;
+  margin: 15px 0 0;
+  padding: 0;
+}
+.prose .reflection-card li {
+  display: grid;
+  grid-template-columns: 23px minmax(0, 1fr);
+  gap: 12px;
+  padding: 0;
+  margin: 0 0 13px;
+  font-size: 0.92em;
+  line-height: 1.7;
+}
+.prose .reflection-card li:last-child {
+  margin-bottom: 0;
+}
+.reflection-number {
+  font:
+    10px/2.8 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  letter-spacing: 0.5px;
+  color: var(--reflection-accent);
+}
+.prose .reflection-card p {
+  margin: 0 0 0.7em;
+}
+.prose .reflection-card p:last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 1100px) {
+  .reflection-card {
+    padding: 16px;
+  }
+}
