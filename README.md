@@ -32,7 +32,7 @@ Install the test browser once with `pnpm exec playwright install chromium`. Core
 ## Reading
 
 - **Month browsing:** choose a year and month in the sidebar. The mini calendar jumps to a day; the list shows every entry, including multiple entries on the same date.
-- **Paging:** Previous/Next or **Option+Left/Right** (Alt on Windows/Linux) stays within the current month or collection. Use the month arrows to cross a month boundary.
+- **Paging:** Previous/Next or **Option+Left/Right** (Alt on Windows/Linux) moves between entries. At the end of a month, Next names the next available month and opens its first entry, skipping empty months. Next is disabled at the end of the archive. Previous stays within the current month; bookmarks and “On this day” stay within their collections.
 - **Calendar:** a full year of days, with populated dates highlighted. Jump between years, months, and individual days.
 - **Cmd+K / Ctrl+K:** search filenames, dates, titles, and body text. Enter opens the selected result; arrows move the selection; Escape closes. Prefix with `>` to filter quick commands.
 - **Rediscovery:** bookmarks, a random entry, and “On this day” across years.

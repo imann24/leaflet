@@ -8,6 +8,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ChevronsRight,
   Clock3,
   FolderOpen,
   Leaf,
@@ -88,6 +89,23 @@ export default function App() {
     [entries, view, bookmarks, month, anniversary],
   );
   const position = visible.findIndex((e) => e.id === selected);
+  const nextEntry =
+    position < 0
+      ? undefined
+      : (visible[position + 1] ??
+        (view === 'journal'
+          ? entries.find((e) => e.month > month)
+          : undefined));
+  const advancesMonth =
+    view === 'journal' && nextEntry !== undefined && nextEntry.month !== month;
+  const followingCalendarMonth = month
+    ? new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)
+    : undefined;
+  const adjacentMonth = followingCalendarMonth
+    ? `${followingCalendarMonth.getFullYear()}-${String(followingCalendarMonth.getMonth() + 1).padStart(2, '0')}`
+    : '';
+  const monthAdvanceLabel =
+    nextEntry?.month === adjacentMonth ? 'Next month' : 'Next available month';
   const monthEntries = useMemo(
     () => entries.filter((e) => e.month === month),
     [entries, month],
@@ -166,9 +184,12 @@ export default function App() {
     if (v === 'journal' && !monthEntries.some((e) => e.id === selected))
       setSelected(monthEntries[0]?.id ?? '');
   };
-  const page = (step: number) => {
-    const next = visible[position + step];
-    if (next) setSelected(next.id);
+  const page = (step: -1 | 1) => {
+    if (position < 0) return;
+    const next = step === 1 ? nextEntry : visible[position - 1];
+    if (!next) return;
+    if (step === 1 && advancesMonth) openEntry(next);
+    else setSelected(next.id);
   };
   const toggleBookmark = () => {
     if (!entry) return;
@@ -760,10 +781,33 @@ export default function App() {
                 </span>
                 <button
                   onClick={() => page(1)}
-                  disabled={position < 0 || position >= visible.length - 1}
+                  disabled={!nextEntry}
+                  className={advancesMonth ? 'month-transition' : undefined}
+                  aria-label={
+                    advancesMonth
+                      ? `${monthAdvanceLabel}: ${monthLabel(nextEntry!.month)}`
+                      : 'Next entry'
+                  }
+                  title={
+                    advancesMonth
+                      ? `Continue to the first entry in ${monthLabel(nextEntry!.month)}`
+                      : undefined
+                  }
                 >
-                  <span>Next entry</span>
-                  <ArrowRight size={16} />
+                  {advancesMonth ? (
+                    <>
+                      <span className="month-transition-label">
+                        <span>{monthAdvanceLabel}</span>
+                        <small>{monthLabel(nextEntry!.month)}</small>
+                      </span>
+                      <ChevronsRight size={18} aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Next entry</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
                 </button>
               </footer>
             </section>

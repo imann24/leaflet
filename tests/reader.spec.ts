@@ -5,7 +5,9 @@ test.beforeEach(async ({ page }) => {
     page.getByRole('heading', { name: 'October 2', exact: true }),
   ).toBeVisible();
 });
-test('pages through a month and stops at its boundaries', async ({ page }) => {
+test('pages through entries and stops at the end of the archive', async ({
+  page,
+}) => {
   await expect(
     page.getByRole('button', { name: 'Next entry', exact: true }),
   ).toBeDisabled();
@@ -261,5 +263,93 @@ test('quick search submission uses the new query and resets a previous selection
   await search.press('Enter');
   await expect(
     page.getByRole('heading', { name: 'A life in days.' }),
+  ).toBeVisible();
+});
+
+test('next month is clearly labeled and opens its first entry', async ({
+  page,
+}) => {
+  await page.keyboard.press('Meta+k');
+  const search = page.getByRole('textbox', {
+    name: 'Search entries and commands',
+  });
+  await search.fill('9.30.26');
+  await search.press('Enter');
+  const nextMonth = page.getByRole('button', {
+    name: 'Next month: October 2026',
+    exact: true,
+  });
+  await expect(nextMonth).toBeEnabled();
+  await expect(nextMonth).toHaveText('Next monthOctober 2026');
+  await page.screenshot({
+    path: 'test-results/next-month.png',
+    animations: 'disabled',
+    fullPage: true,
+  });
+  await nextMonth.click();
+  await expect(
+    page.getByRole('heading', { name: 'October 1', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.entry-column-heading h2')).toHaveText(
+    'October 2026',
+  );
+  await expect(page.locator('.reader-footer')).toContainText('1 of 2');
+  await expect(
+    page.getByRole('button', { name: 'Next entry', exact: true }),
+  ).toBeEnabled();
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'October 1', exact: true }),
+  ).toBeVisible();
+});
+
+test('keyboard paging crosses year boundaries and skips empty months', async ({
+  page,
+}) => {
+  await page.keyboard.press('Meta+k');
+  const search = page.getByRole('textbox', {
+    name: 'Search entries and commands',
+  });
+  await search.fill('10.30.25');
+  await search.press('Enter');
+  await expect(
+    page.getByRole('button', {
+      name: 'Next available month: September 2026',
+      exact: true,
+    }),
+  ).toBeEnabled();
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(
+    page.getByRole('heading', { name: 'September 2', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Archive year')).toHaveValue('2026');
+  await expect(page.locator('.entry-column-heading h2')).toHaveText(
+    'September 2026',
+  );
+  await expect(page.locator('.reader-footer')).toContainText('1 of 9');
+});
+
+test('next stays inside the bookmark collection at a month boundary', async ({
+  page,
+}) => {
+  await page.keyboard.press('Meta+k');
+  const search = page.getByRole('textbox', {
+    name: 'Search entries and commands',
+  });
+  await search.fill('9.30.26');
+  await search.press('Enter');
+  await page
+    .getByRole('button', { name: 'Bookmark entry', exact: true })
+    .click();
+  await page.getByRole('button', { name: /^Bookmarks/ }).click();
+  await expect(
+    page.getByRole('button', { name: 'Next entry', exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Next month:/ })).toHaveCount(
+    0,
+  );
+  await page.keyboard.press('Alt+ArrowRight');
+  await expect(
+    page.getByRole('heading', { name: 'September 30', exact: true }),
   ).toBeVisible();
 });
