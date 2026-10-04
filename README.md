@@ -35,6 +35,7 @@ Install the test browser once with `pnpm exec playwright install chromium`. Core
 - **Paging:** Previous/Next or **Option+Left/Right** (Alt on Windows/Linux) moves between entries. At the end of a month, Next names the next available month and opens its first entry, skipping empty months. Next is disabled at the end of the archive. Previous stays within the current month; bookmarks and “On this day” stay within their collections.
 - **Calendar:** a full year of days, with populated dates highlighted. Jump between years, months, and individual days.
 - **Cmd+K / Ctrl+K:** search filenames, dates, titles, and body text. Enter opens the selected result; arrows move the selection; Escape closes. Prefix with `>` to filter quick commands.
+- **Live updates:** new entries, edits, renames, and removals refresh automatically using native filesystem events. Bursts are grouped for half a second; a one-minute safety check and a check on returning to the app catch missed events. Your current entry, scroll position, view, and bookmarks stay in place. If native watching is unavailable, the sidebar shows the periodic refresh mode.
 - **Rediscovery:** bookmarks, a random entry, and “On this day” across years.
 - **Reading controls:** focus mode, light/dark themes, text size, and original-text view. Escape leaves focus mode. The last opened entry is remembered per archive.
 - **Daily reflection:** “The 3 and 3” exercises become Gratitude, Forgiveness, and Curiosity cards, with every item retained. Skipped exercise banners are hidden in rendered mode and previews. Original-text mode always retains the complete source.
@@ -62,6 +63,8 @@ Pages and Word documents are not imported; use plain-text or Markdown copies of 
 
 ## Architecture and data
 
+- `src-tauri/src/watch.rs`: native filesystem notifications with per-window subscription cleanup.
+- `src/lib/archive-monitor.ts`: debounced, serialized background refresh, fallback checks, and cancellation when changing folders.
 - `src-tauri/src/lib.rs`: asynchronous, read-only folder scan. Returns entries and per-file read warnings; no journal-writing command exists.
 - `src/lib/journal.ts`: date/header parsing, ordering, metadata, and search.
 - `src/lib/archive.ts`: native bridge, folder picker, and local preferences.
@@ -71,4 +74,4 @@ Pages and Word documents are not imported; use plain-text or Markdown copies of 
 
 Journal contents stay in memory while the app is open. Only the folder path, bookmarked entry identifiers, last-opened entry, theme, and text size are saved in the webview's local storage. No personal text is copied into the repository or bundled frontend. No accounts, telemetry, remote fonts, or network search are used. Raw HTML is not executed, images appear as placeholders, and supported links open in the system browser only after a click.
 
-Use **Refresh journal** after changing files externally. This scaffold loads the archive into memory and searches it locally; it does not yet include live file watching, legacy document conversion, attachment rendering, editing, signing, or automatic updates. Browser tests cover the UI using fictional data; they do not substitute for testing native dialogs and macOS webview behavior.
+Use **Refresh journal** for an immediate manual reload; external changes are normally picked up automatically. Background checks compare snapshots and avoid re-rendering an unchanged archive. If the folder is temporarily unavailable, the last loaded entries remain readable while Leaflet retries. This scaffold loads the archive into memory and searches it locally; it does not yet include legacy document conversion, attachment rendering, editing, signing, or automatic application updates. Browser tests cover the UI using fictional data; they do not substitute for testing native dialogs and macOS webview behavior.

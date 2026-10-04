@@ -28,6 +28,7 @@ import {
   loadArchive,
   readPreference,
   savePreference,
+  watchArchive,
 } from './lib/archive';
 import {
   dateValue,
@@ -41,12 +42,19 @@ import {
 import { Calendar } from './components/Calendar';
 import { CommandPalette } from './components/CommandPalette';
 import { EntryBody } from './components/EntryBody';
+import {
+  sameArchive,
+  startArchiveMonitor,
+  type MonitorMode,
+} from './lib/archive-monitor';
 import './App.css';
 
 type View = 'journal' | 'calendar' | 'bookmarks' | 'anniversary';
 export default function App() {
   const [archive, setArchive] = useState<Archive | null>(null);
   const [busy, setBusy] = useState(true);
+  const [monitorMode, setMonitorMode] = useState<MonitorMode>('polling');
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState('');
   const [month, setMonth] = useState('');
@@ -138,6 +146,39 @@ export default function App() {
   useEffect(() => {
     void load(readPreference<string>('root', ''));
   }, [load]);
+  useEffect(() => {
+    if (!desktop || !rootKey || busy) return;
+    setSyncError(null);
+    const monitor = startArchiveMonitor({
+      root: rootKey,
+      load: loadArchive,
+      subscribe: watchArchive,
+      onUpdate: (data) =>
+        setArchive((current) => (sameArchive(current, data) ? current : data)),
+      onError: setSyncError,
+      onMode: setMonitorMode,
+    });
+    const resume = () => {
+      if (document.visibilityState === 'visible') monitor.refresh();
+    };
+    window.addEventListener('focus', monitor.refresh);
+    document.addEventListener('visibilitychange', resume);
+    return () => {
+      monitor.dispose();
+      window.removeEventListener('focus', monitor.refresh);
+      document.removeEventListener('visibilitychange', resume);
+    };
+  }, [rootKey, busy]);
+  useEffect(() => {
+    // A removed file cannot remain selected. Additions/edits never change the selection.
+    if (!archive || busy || entries.some((e) => e.id === selected)) return;
+    if (view === 'journal' && !months.includes(month) && months.length) {
+      const replacementMonth = months.find((m) => m > month) ?? months.at(-1)!;
+      setMonth(replacementMonth);
+      setYear(replacementMonth.slice(0, 4));
+      setSelected(entries.find((e) => e.month === replacementMonth)?.id ?? '');
+    } else setSelected(visible[0]?.id ?? '');
+  }, [archive, busy, entries, selected, months, month, view, visible]);
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     savePreference('dark', dark);
@@ -392,9 +433,23 @@ export default function App() {
             <ArrowRight size={16} />
           </button>
           <div className="folder-status">
-            <span className="status-dot" />
-            <span title={archive?.root}>
-              {desktop ? 'Local journal' : 'Demo journal'}
+            <span className={`status-dot ${syncError ? 'sync-warning' : ''}`} />
+            <span
+              title={
+                syncError
+                  ? `Automatic refresh will retry: ${syncError}`
+                  : desktop
+                    ? `${archive?.root ?? ''} · ${monitorMode === 'live' ? 'Watching for changes, with a one-minute safety check' : 'Checking for changes every minute'}`
+                    : archive?.root
+              }
+            >
+              {desktop
+                ? syncError
+                  ? 'Sync unavailable'
+                  : monitorMode === 'live'
+                    ? 'Live journal'
+                    : 'Auto-refresh · 1 min'
+                : 'Demo journal'}
             </span>
             <button
               title="Refresh journal"

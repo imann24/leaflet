@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { Archive } from './journal';
 import { demo } from './demo';
@@ -31,5 +32,34 @@ export function savePreference(key: string, value: unknown) {
     localStorage.setItem(`leaflet:${key}`, JSON.stringify(value));
   } catch {
     /* Reading works even when storage is unavailable. */
+  }
+}
+
+export async function watchArchive(
+  root: string,
+  onChange: () => void,
+  onFailure: () => void,
+  signal: AbortSignal,
+): Promise<() => void> {
+  const unlisten = await listen<{ root: string; failed: boolean }>(
+    'journal-changed',
+    (event) => {
+      if (event.payload.root !== root) return;
+      if (event.payload.failed) onFailure();
+      else onChange();
+    },
+  );
+  try {
+    signal.throwIfAborted();
+    const id = await invoke<number>('watch_archive', { root });
+    return () => {
+      unlisten();
+      void invoke('unwatch_archive', { id }).catch(() => {
+        /* The app may already be closing. */
+      });
+    };
+  } catch (error) {
+    unlisten();
+    throw error;
   }
 }

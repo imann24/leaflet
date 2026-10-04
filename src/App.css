@@ -1052,3 +1052,6 @@ kbd,
     transition: none !important;
   }
 }
+.status-dot.sync-warning {
+  background: var(--gratitude-accent);
+}

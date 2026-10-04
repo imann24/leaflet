@@ -1,3 +1,5 @@
+mod watch;
+
 use serde::Serialize;
 use std::{fs, path::PathBuf};
 use tauri::Manager;
@@ -108,9 +110,14 @@ async fn load_archive(app: tauri::AppHandle, root: Option<String>) -> Result<Arc
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(watch::JournalWatchers::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![load_archive])
+        .invoke_handler(tauri::generate_handler![
+            load_archive,
+            watch::watch_archive,
+            watch::unwatch_archive
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Leaflet");
 }
