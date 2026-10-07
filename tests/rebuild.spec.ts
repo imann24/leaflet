@@ -87,3 +87,67 @@ test('command palette opens rebuild and unavailable runtimes cannot start it', a
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('status polling recovers from an initial failure and clears only its own error', async ({
+  page,
+}) => {
+  await page.evaluate(() => window.journalTest.failStatusPolls(100));
+  await page.getByRole('button', { name: 'Rebuild app', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Status temporarily unavailable',
+  );
+  await page.evaluate(() => window.journalTest.failStatusPolls(0));
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(
+    page.getByLabel('Workspace folder', { exact: true }),
+  ).toHaveValue('/fictional/leaflet');
+  await expect(
+    page.getByRole('button', { name: 'Rebuild & restart' }),
+  ).toBeEnabled();
+
+  await page.evaluate(() => {
+    window.journalTest.failRebuild('Could not start the rebuild worker');
+    window.journalTest.failStatusPolls(1);
+  });
+  await page.getByRole('button', { name: 'Rebuild & restart' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Could not start the rebuild worker',
+  );
+  const calls = await page.evaluate(() => window.journalTest.statusCalls);
+  await expect
+    .poll(() => page.evaluate(() => window.journalTest.statusCalls))
+    .toBeGreaterThanOrEqual(calls + 2);
+  await expect(page.getByRole('alert')).toContainText(
+    'Could not start the rebuild worker',
+  );
+});
+
+test('workspace comes from the native picker, not local storage or build arguments', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'leaflet:buildWorkspace',
+      JSON.stringify('/untrusted/workspace'),
+    );
+    window.journalTest.setRebuild({ workspace: '' });
+  });
+  await page.getByRole('button', { name: 'Rebuild app', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Rebuild & restart' }),
+  ).toBeDisabled();
+  await expect(
+    page.getByLabel('Workspace folder', { exact: true }),
+  ).not.toBeEditable();
+  await page.getByRole('button', { name: 'Choose workspace folder' }).click();
+  await expect(
+    page.getByLabel('Workspace folder', { exact: true }),
+  ).toHaveValue('/fictional/Leaflet workspace');
+  await page.getByRole('button', { name: 'Rebuild & restart' }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.journalTest.rebuildCalls))
+    .toBe(1);
+  expect(
+    await page.evaluate(() => window.journalTest.rebuildArgs),
+  ).not.toHaveProperty('workspace');
+});

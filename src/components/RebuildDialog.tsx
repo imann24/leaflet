@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
 import { FolderOpen, X } from 'lucide-react';
-import { readPreference, savePreference } from '../lib/archive';
 import './RebuildDialog.css';
 
 interface RebuildStatus {
@@ -17,8 +15,10 @@ interface RebuildStatus {
 export function RebuildDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [status, setStatus] = useState<RebuildStatus | null>(null);
-  const [workspace, setWorkspace] = useState('');
   const [error, setError] = useState('');
+  const [pollError, setPollError] = useState('');
+  const [picking, setPicking] = useState(false);
+  const workspace = status?.workspace ?? '';
   const [submitting, setSubmitting] = useState(false);
   const busy =
     submitting ||
@@ -28,24 +28,19 @@ export function RebuildDialog({ onClose }: { onClose: () => void }) {
     dialog.current?.showModal();
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
-    async function refresh(initial = false) {
+    async function refresh() {
       try {
         const next = await invoke<RebuildStatus>('rebuild_status');
         if (disposed) return;
         setStatus(next);
-        if (initial)
-          setWorkspace(
-            next.phase === 'building' || next.phase === 'installing'
-              ? next.workspace
-              : readPreference('buildWorkspace', next.workspace),
-          );
+        setPollError('');
       } catch (e) {
-        if (!disposed) setError(String(e));
+        if (!disposed) setPollError(String(e));
       } finally {
         if (!disposed) timer = setTimeout(() => void refresh(), 1000);
       }
     }
-    void refresh(true);
+    void refresh();
     return () => {
       disposed = true;
       clearTimeout(timer);
@@ -53,27 +48,22 @@ export function RebuildDialog({ onClose }: { onClose: () => void }) {
   }, []);
 
   async function chooseWorkspace() {
+    setPicking(true);
+    setError('');
     try {
-      const chosen = await open({
-        directory: true,
-        multiple: false,
-        title: 'Choose the Leaflet workspace',
-      });
-      if (typeof chosen === 'string') {
-        setWorkspace(chosen);
-        savePreference('buildWorkspace', chosen);
-        setError('');
-      }
+      const chosen = await invoke<string | null>('choose_build_workspace');
+      if (chosen) setStatus(await invoke<RebuildStatus>('rebuild_status'));
     } catch (e) {
       setError(String(e));
+    } finally {
+      setPicking(false);
     }
   }
   async function rebuild() {
     setSubmitting(true);
     setError('');
     try {
-      await invoke('rebuild_app', { workspace });
-      savePreference('buildWorkspace', workspace);
+      await invoke('rebuild_app');
       setStatus(await invoke<RebuildStatus>('rebuild_status'));
     } catch (e) {
       setError(String(e));
@@ -108,8 +98,8 @@ export function RebuildDialog({ onClose }: { onClose: () => void }) {
         <input
           id="build-workspace"
           value={workspace}
-          onChange={(e) => setWorkspace(e.target.value)}
-          disabled={busy}
+          readOnly
+          disabled={busy || picking}
           spellCheck={false}
           placeholder="Choose your Leaflet checkout"
         />
@@ -117,7 +107,7 @@ export function RebuildDialog({ onClose }: { onClose: () => void }) {
           className="icon-button"
           aria-label="Choose workspace folder"
           onClick={() => void chooseWorkspace()}
-          disabled={busy}
+          disabled={busy || picking}
         >
           <FolderOpen size={18} />
         </button>
@@ -130,9 +120,9 @@ export function RebuildDialog({ onClose }: { onClose: () => void }) {
       {status?.unavailableReason && (
         <p className="notice">{status.unavailableReason}</p>
       )}
-      {(error || status?.error) && (
+      {(error || pollError || status?.error) && (
         <p role="alert" className="notice error">
-          {error || status?.error}
+          {error || pollError || status?.error}
         </p>
       )}
       <p role="status">
@@ -160,7 +150,11 @@ export function RebuildDialog({ onClose }: { onClose: () => void }) {
         <button
           className="primary"
           disabled={
-            !status || !!status.unavailableReason || !workspace.trim() || busy
+            !status ||
+            !!status.unavailableReason ||
+            !workspace.trim() ||
+            busy ||
+            picking
           }
           onClick={() => void rebuild()}
         >

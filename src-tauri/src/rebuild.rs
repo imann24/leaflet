@@ -1,10 +1,14 @@
 //! Local developer updates. No network updater or privileged installer is involved.
 use serde::Serialize;
 use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
+    fs,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, MutexGuard},
 };
 use tauri::Manager;
+
+const INSTALL_ERROR: &str = "local-rebuild-install-error";
+const WORKSPACE_PREFERENCE: &str = "local-rebuild-workspace.json";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +19,8 @@ pub struct RebuildStatus {
     error: Option<String>,
     log: String,
     log_path: Option<String>,
+    #[serde(skip)]
+    initialized: bool,
 }
 
 pub struct RebuildState(Arc<Mutex<RebuildStatus>>);
@@ -22,16 +28,28 @@ impl Default for RebuildState {
     fn default() -> Self {
         Self(Arc::new(Mutex::new(RebuildStatus {
             phase: "idle".into(),
-            workspace: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .to_string_lossy()
-                .into_owned(),
+            workspace: String::new(),
             unavailable_reason: unavailable_reason(),
             error: None,
             log: String::new(),
             log_path: None,
+            initialized: false,
         })))
+    }
+}
+
+fn lock_status(state: &Mutex<RebuildStatus>) -> MutexGuard<'_, RebuildStatus> {
+    // A worker panic must not make either status reads or retries panic too.
+    state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn require_main(label: &str) -> Result<(), String> {
+    if label == "main" {
+        Ok(())
+    } else {
+        Err("Local rebuild commands are only available in the main window.".into())
     }
 }
 
@@ -46,25 +64,38 @@ fn unavailable_reason() -> Option<String> {
     }
 }
 
-#[tauri::command]
-pub fn rebuild_status(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, RebuildState>,
-) -> RebuildStatus {
-    let mut status = state.0.lock().unwrap().clone();
-    if status.log_path.is_none() {
-        status.log_path = app
-            .path()
-            .app_log_dir()
+fn initialize(status: &mut RebuildStatus, config: &Path, logs: &Path) {
+    if !status.initialized {
+        status.workspace = fs::read(config.join(WORKSPACE_PREFERENCE))
             .ok()
-            .map(|p| p.join("local-rebuild.log"))
-            .filter(|p| p.is_file())
-            .map(|p| p.to_string_lossy().into_owned());
+            .and_then(|bytes| serde_json::from_slice::<String>(&bytes).ok())
+            .unwrap_or_default();
+        let log = logs.join("local-rebuild.log");
+        if log.is_file() {
+            status.log_path = Some(log.to_string_lossy().into_owned());
+        }
+        status.initialized = true;
     }
+    // Only the detached installer writes this marker. Keep the error for this
+    // session, but consume it so future launches do not resurrect old failures.
+    if let Some(error) = consume_install_error(&logs.join(INSTALL_ERROR)) {
+        status.error = Some(error);
+        status.phase = "failed".into();
+    }
+}
+
+fn consume_install_error(path: &Path) -> Option<String> {
+    let message = fs::read_to_string(path).ok()?;
+    fs::remove_file(path).ok()?;
+    Some(message.trim().to_owned())
+}
+
+fn status_snapshot(state: &Mutex<RebuildStatus>) -> RebuildStatus {
+    let mut status = lock_status(state).clone();
+    // Never fall back to the previous run's log while a new worker is starting.
     if let Some(path) = &status.log_path {
-        // Read only a bounded tail, even during a very verbose build.
         use std::io::{Read, Seek, SeekFrom};
-        if let Ok(mut file) = std::fs::File::open(path) {
+        if let Ok(mut file) = fs::File::open(path) {
             let size = file.metadata().map(|m| m.len()).unwrap_or(0);
             let _ = file.seek(SeekFrom::Start(size.saturating_sub(16_384)));
             let mut bytes = Vec::new();
@@ -72,56 +103,152 @@ pub fn rebuild_status(
             status.log = String::from_utf8_lossy(&bytes).into_owned();
         }
     }
-    if status.phase == "idle" {
-        if let Some(error) = status
-            .log
-            .lines()
-            .rev()
-            .find(|line| line.starts_with("Update failed:"))
-        {
-            status.error = Some(error.to_owned());
-            status.phase = "failed".into();
+    status
+}
+
+#[tauri::command]
+pub fn rebuild_status(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    state: tauri::State<'_, RebuildState>,
+) -> Result<RebuildStatus, String> {
+    require_main(window.label())?;
+    initialize(
+        &mut lock_status(&state.0),
+        &app.path().app_config_dir().map_err(|e| e.to_string())?,
+        &app.path().app_log_dir().map_err(|e| e.to_string())?,
+    );
+    Ok(status_snapshot(&state.0))
+}
+
+#[tauri::command]
+pub async fn choose_build_workspace(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    state: tauri::State<'_, RebuildState>,
+) -> Result<Option<String>, String> {
+    require_main(window.label())?;
+    ensure_idle(&lock_status(&state.0))?;
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let picker_app = app.clone();
+        let selected = tauri::async_runtime::spawn_blocking(move || {
+            picker_app
+                .dialog()
+                .file()
+                .set_parent(&window)
+                .set_title("Choose the Leaflet workspace")
+                .blocking_pick_folder()
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let selected = selected.into_path().map_err(|e| e.to_string())?;
+        let root = macos::validate_workspace(&selected.to_string_lossy())?;
+        let workspace = root.to_string_lossy().into_owned();
+        let mut status = lock_status(&state.0);
+        ensure_idle(&status)?;
+        let config = app.path().app_config_dir().map_err(|e| e.to_string())?;
+        let logs = app.path().app_log_dir().map_err(|e| e.to_string())?;
+        initialize(&mut status, &config, &logs);
+        fs::create_dir_all(&config).map_err(|e| e.to_string())?;
+        let temporary = config.join("local-rebuild-workspace.tmp");
+        fs::write(
+            &temporary,
+            serde_json::to_vec(&workspace).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        fs::rename(temporary, config.join(WORKSPACE_PREFERENCE)).map_err(|e| e.to_string())?;
+        status.workspace = workspace.clone();
+        Ok(Some(workspace))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("Local app rebuilding is available on macOS.".into())
+    }
+}
+
+fn ensure_idle(status: &RebuildStatus) -> Result<(), String> {
+    if matches!(status.phase.as_str(), "building" | "installing") {
+        Err("A rebuild is already running.".into())
+    } else {
+        Ok(())
+    }
+}
+
+fn begin_rebuild(status: &mut RebuildStatus) -> Result<String, String> {
+    ensure_idle(status)?;
+    if status.workspace.is_empty() {
+        return Err(
+            "Choose the Leaflet workspace with the folder picker before rebuilding.".into(),
+        );
+    }
+    status.phase = "building".into();
+    status.error = None;
+    status.log.clear();
+    status.log_path = None;
+    Ok(status.workspace.clone())
+}
+
+fn fail_worker(state: &Mutex<RebuildStatus>, error: String) {
+    let mut status = lock_status(state);
+    if let Some(path) = &status.log_path {
+        use std::io::Write;
+        if let Ok(mut log) = fs::OpenOptions::new().append(true).open(path) {
+            let _ = writeln!(log, "Update failed: {error}");
         }
     }
-    status
+    status.phase = "failed".into();
+    status.error = Some(error);
+}
+
+fn run_worker(state: &Mutex<RebuildStatus>, job: impl FnOnce() -> Result<(), String>) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)).unwrap_or_else(|_| {
+        Err("The rebuild worker stopped unexpectedly. You can retry; see the build output.".into())
+    });
+    if let Err(error) = result {
+        fail_worker(state, error);
+    }
 }
 
 #[tauri::command]
 pub fn rebuild_app(
     app: tauri::AppHandle,
+    window: tauri::Window,
     state: tauri::State<'_, RebuildState>,
-    workspace: String,
 ) -> Result<(), String> {
+    require_main(window.label())?;
     if let Some(reason) = unavailable_reason() {
         return Err(reason);
     }
-    {
-        let mut status = state.0.lock().unwrap();
-        if matches!(status.phase.as_str(), "building" | "installing") {
-            return Err("A rebuild is already running.".into());
-        }
-        status.phase = "building".into();
-        status.workspace = workspace.clone();
-        status.error = None;
-        status.log.clear();
-        status.log_path = None;
-    }
+    let workspace = {
+        let mut status = lock_status(&state.0);
+        initialize(
+            &mut status,
+            &app.path().app_config_dir().map_err(|e| e.to_string())?,
+            &app.path().app_log_dir().map_err(|e| e.to_string())?,
+        );
+        begin_rebuild(&mut status)?
+    };
     #[cfg(target_os = "macos")]
     {
-        let state = state.0.clone();
-        std::thread::spawn(move || {
-            if let Err(error) = macos::build_and_restart(&app, &state, &workspace) {
-                let mut status = state.lock().unwrap();
-                if let Some(path) = &status.log_path {
-                    use std::io::Write;
-                    if let Ok(mut log) = std::fs::OpenOptions::new().append(true).open(path) {
-                        let _ = writeln!(log, "Update failed: {error}");
-                    }
-                }
-                status.phase = "failed".into();
-                status.error = Some(error);
-            }
-        });
+        let worker_state = state.0.clone();
+        if let Err(error) = std::thread::Builder::new()
+            .name("local-rebuild".into())
+            .spawn(move || {
+                run_worker(&worker_state, || {
+                    macos::build_and_restart(&app, &worker_state, &workspace)
+                });
+            })
+        {
+            let error = format!("Could not start the rebuild worker: {error}");
+            fail_worker(&state.0, error.clone());
+            return Err(error);
+        }
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (app, workspace);
@@ -160,7 +287,7 @@ mod macos {
         Ok(bundle.to_path_buf())
     }
 
-    fn validate_workspace(workspace: &str) -> Result<PathBuf, String> {
+    pub(super) fn validate_workspace(workspace: &str) -> Result<PathBuf, String> {
         let root = Path::new(workspace)
             .canonicalize()
             .map_err(|e| format!("Cannot open the workspace: {e}"))?;
@@ -219,7 +346,7 @@ mod macos {
             .ok_or("Cannot locate the app's folder.")?;
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .map_err(|e| e.to_string())?
             .as_nanos();
         let staging = parent.join(format!(".leaflet-rebuild-{}-{nonce}", std::process::id()));
         // Stage on the destination volume so replacement uses renames, never a partial copy.
@@ -255,7 +382,7 @@ mod macos {
         )
         .map_err(|e| e.to_string())?;
         {
-            let mut status = state.lock().unwrap();
+            let mut status = lock_status(state);
             status.log_path = Some(log_path.to_string_lossy().into_owned());
             status.workspace = root.to_string_lossy().into_owned();
         }
@@ -280,9 +407,8 @@ mod macos {
             fs::remove_dir_all(&bundles).map_err(|e| e.to_string())?;
         }
         let output = Command::new("/bin/zsh")
-            .args(["-lc", "export PATH=\"$LEAFLET_BUILD_PATH:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\"; cd -- \"$LEAFLET_WORKSPACE\" || exit 1; exec pnpm exec tauri build --bundles app --target \"$LEAFLET_BUILD_TARGET\""])
+            .args(["-lc", include_str!("rebuild-build.sh")])
             .current_dir(root)
-            .env("LEAFLET_BUILD_PATH", env!("LEAFLET_BUILD_PATH"))
             .env("LEAFLET_WORKSPACE", root)
             .env("LEAFLET_BUILD_TARGET", triple)
             .env("CARGO_TARGET_DIR", &target)
@@ -291,7 +417,8 @@ mod macos {
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(|e| e.to_string())?)
             .stderr(log.try_clone().map_err(|e| e.to_string())?)
-            .status().map_err(|e| format!("Could not start the build: {e}"))?;
+            .status()
+            .map_err(|e| format!("Could not start the build: {e}"))?;
         if !output.success() {
             return Err("Build failed. The current app is unchanged. Check the build output; Node.js, pnpm, Rust, Xcode command-line tools, and installed workspace dependencies are required.".into());
         }
@@ -348,6 +475,7 @@ mod macos {
             .arg(std::process::id().to_string())
             .arg(destination)
             .arg(staging)
+            .arg(logs.join(INSTALL_ERROR))
             .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(|e| e.to_string())?)
@@ -359,7 +487,7 @@ mod macos {
             .map_err(|e| format!("Could not start the installer: {e}"))?;
         for _ in 0..50 {
             if ready.exists() {
-                state.lock().unwrap().phase = "installing".into();
+                lock_status(state).phase = "installing".into();
                 app.exit(0);
                 return Ok(());
             }
@@ -384,7 +512,10 @@ mod macos {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            let root = std::env::temp_dir().join(format!("leaflet install ' $ {nonce}"));
+            let root = std::env::temp_dir().join(format!(
+                "leaflet install ' $ {}-{failure}-{nonce}",
+                std::process::id()
+            ));
             let staging = root.join("staging");
             let destination = root.join("Leaflet test.app");
             let bin = root.join("bin");
@@ -398,7 +529,7 @@ mod macos {
                 r#"#!/bin/sh
 version=$(cat "$2/version")
 echo "$version" >> "$TEST_ROOT/launches"
-[ "$FAILURE" != launch ] || [ "$version" != new ]
+case "$FAILURE" in launch|marker) [ "$version" != new ];; *) exit 0;; esac
 "#,
             )
             .unwrap();
@@ -423,6 +554,11 @@ exec /bin/mv "$@"
                 .arg(pid.to_string())
                 .arg(&destination)
                 .arg(&staging)
+                .arg(root.join(if failure == "marker" {
+                    "missing/error"
+                } else {
+                    INSTALL_ERROR
+                }))
                 .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
                 .env("TEST_ROOT", &root)
                 .env("FAILURE", failure)
@@ -440,13 +576,22 @@ exec /bin/mv "$@"
             assert_eq!(
                 launches,
                 match failure {
-                    "launch" => "new\nold\n",
+                    "launch" | "marker" => "new\nold\n",
                     "install" => "old\n",
                     _ => "new\n",
                 }
             );
             if failure.is_empty() {
                 assert!(!staging.exists());
+                assert!(!root.join(INSTALL_ERROR).exists());
+            } else if failure != "marker" {
+                let error = consume_install_error(&root.join(INSTALL_ERROR)).unwrap();
+                assert!(error.contains(if failure == "launch" {
+                    "launch"
+                } else {
+                    "install"
+                }));
+                assert!(consume_install_error(&root.join(INSTALL_ERROR)).is_none());
             }
             fs::remove_dir_all(root).unwrap();
         }
@@ -465,6 +610,10 @@ exec /bin/mv "$@"
         }
 
         #[test]
+        fn installer_still_rolls_back_if_error_reporting_fails() {
+            install_fixture("marker");
+        }
+        #[test]
         fn rejects_unrelated_workspaces() {
             assert!(validate_workspace("/tmp").is_err());
             assert!(validate_workspace("/nonexistent/leaflet").is_err());
@@ -477,5 +626,102 @@ exec /bin/mv "$@"
             )
             .is_ok());
         }
+    }
+}
+
+#[cfg(test)]
+mod state_tests {
+    use super::*;
+
+    fn scratch() -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "leaflet-rebuild-state-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn installer_error_is_consumed_for_one_session_and_logs_never_set_phase() {
+        let root = scratch();
+        fs::write(
+            root.join("local-rebuild.log"),
+            "Update failed: old build error\n",
+        )
+        .unwrap();
+        let first = RebuildState::default();
+        initialize(&mut lock_status(&first.0), &root, &root);
+        assert_eq!(status_snapshot(&first.0).phase, "idle");
+        assert!(status_snapshot(&first.0).error.is_none());
+        fs::write(root.join(INSTALL_ERROR), "Could not install the build.\n").unwrap();
+        initialize(&mut lock_status(&first.0), &root, &root);
+        assert_eq!(status_snapshot(&first.0).phase, "failed");
+        assert_eq!(
+            status_snapshot(&first.0).error.as_deref(),
+            Some("Could not install the build.")
+        );
+        assert!(!root.join(INSTALL_ERROR).exists());
+        initialize(&mut lock_status(&first.0), &root, &root);
+        assert_eq!(status_snapshot(&first.0).phase, "failed");
+        let next_launch = RebuildState::default();
+        initialize(&mut lock_status(&next_launch.0), &root, &root);
+        assert_eq!(status_snapshot(&next_launch.0).phase, "idle");
+        assert!(status_snapshot(&next_launch.0).error.is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn new_worker_cannot_show_previous_log_or_start_twice() {
+        let root = scratch();
+        fs::write(root.join("local-rebuild.log"), "Previous build output").unwrap();
+        fs::write(
+            root.join(WORKSPACE_PREFERENCE),
+            r#""/native/picker/workspace""#,
+        )
+        .unwrap();
+        let state = RebuildState::default();
+        initialize(&mut lock_status(&state.0), &root, &root);
+        assert_eq!(
+            begin_rebuild(&mut lock_status(&state.0)).unwrap(),
+            "/native/picker/workspace"
+        );
+        // A status poll during worker startup must not reattach the old log.
+        initialize(&mut lock_status(&state.0), &root, &root);
+        let snapshot = status_snapshot(&state.0);
+        assert_eq!(snapshot.phase, "building");
+        assert!(snapshot.log.is_empty());
+        assert!(snapshot.log_path.is_none());
+        assert!(begin_rebuild(&mut lock_status(&state.0)).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn panic_with_poisoned_mutex_recovers_to_a_retryable_failure() {
+        let state = RebuildState::default();
+        lock_status(&state.0).workspace = "/native/picker/workspace".into();
+        begin_rebuild(&mut lock_status(&state.0)).unwrap();
+        run_worker(&state.0, || {
+            let _guard = state.0.lock().unwrap();
+            panic!("injected worker panic");
+        });
+        assert!(state.0.is_poisoned());
+        let status = status_snapshot(&state.0);
+        assert_eq!(status.phase, "failed");
+        assert!(status.error.unwrap().contains("stopped unexpectedly"));
+        assert!(begin_rebuild(&mut lock_status(&state.0)).is_ok());
+    }
+
+    #[test]
+    fn rebuild_requires_native_selection_and_main_window() {
+        let state = RebuildState::default();
+        assert!(begin_rebuild(&mut lock_status(&state.0)).is_err());
+        assert!(require_main("main").is_ok());
+        assert!(require_main("secondary").is_err());
+        assert!(require_main("").is_err());
     }
 }

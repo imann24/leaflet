@@ -36,8 +36,9 @@ Package this feature once with `pnpm tauri build --bundles app`, then open
 An older installed version must be replaced once to gain the rebuild control.
 
 Click **Rebuild app** at the bottom of the sidebar, or use **Cmd+K → Rebuild app**.
-Choose the Leaflet workspace (defaults to the checkout that built the app), then
-click **Rebuild & restart**. The folder is remembered. The build uses the current
+Choose the Leaflet workspace with the native folder picker, then
+click **Rebuild & restart**. The folder is remembered by the native app. Rebuilds
+only use this selection; a webview cannot submit a different build path. The build uses the current
 checkout, including uncommitted changes; it does not pull, switch branches, or
 install workspace dependencies. Only select a workspace whose build scripts you
 trust. Keep the prerequisites above installed and run `pnpm install` after dependency
@@ -50,16 +51,18 @@ the new bundle beside the running app, ad-hoc signs and verifies it, quits,
 replaces that app, and relaunches. No Apple developer certificate is needed.
 Existing journal preferences and bookmarks remain in place. Build failures leave
 the current app running; replacement or launch-command failures restore the
-previous bundle when possible. The installer does not detect crashes after macOS
+previous bundle when possible. Installer failures are reported once after relaunch;
+old build logs do not put later launches into a failed state. The installer does not detect crashes after macOS
 has accepted the launch request.
 
 This is a local macOS developer workflow. It requires a writable app location and
 is unavailable in browser previews, `pnpm desktop`, disk images, and translocated
 apps. Builds reuse a separate Cargo cache under `src-tauri/target/local-rebuild`
 and target the running app's architecture. Do not run the app directly from that
-internal cache. Finder launches use the build-time toolchain PATH plus the login
-shell environment; if you move or remove your Node/Rust toolchain, repair the
-terminal build environment first. No administrator prompt or remote release
+internal cache. Finder launches discover tools from the current user's login shell,
+standard Cargo/Homebrew/pnpm locations, and nvm's selected/default Node version.
+Corepack is used if a pnpm shim is unavailable. No build-machine PATH is embedded
+in the app. If tools cannot be found, fix your login-shell environment first. No administrator prompt or remote release
 service is used.
 
 ## Reading
@@ -106,6 +109,6 @@ Pages and Word documents are not imported; use plain-text or Markdown copies of 
 - `src/App.tsx`: navigation and reader state.
 - `src/lib/demo.ts`: fictional fixtures for browser preview and tests.
 
-Journal contents stay in memory while the app is open. Only the folder path, bookmarked entry identifiers, last-opened entry, theme, text size, and build workspace path are saved in the webview's local storage. No personal text is copied into the repository or bundled frontend. No accounts, telemetry, remote fonts, or network search are used. Raw HTML is not executed, images appear as placeholders, and supported links open in the system browser only after a click.
+Journal contents stay in memory while the app is open. Only the folder path, bookmarked entry identifiers, last-opened entry, theme, and text size are saved in the webview's local storage. The native app saves the picker-selected build workspace in its app configuration directory. Rebuild commands are restricted to the main window by Tauri permissions and a native window check. No personal text is copied into the repository or bundled frontend. No accounts, telemetry, remote fonts, or network search are used. Raw HTML is not executed, images appear as placeholders, and supported links open in the system browser only after a click.
 
 Use **Refresh journal** for an immediate manual reload; external changes are normally picked up automatically. Background checks compare snapshots and avoid re-rendering an unchanged archive. If the folder is temporarily unavailable, the last loaded entries remain readable while Leaflet retries. This scaffold loads the archive into memory and searches it locally; it does not yet include legacy document conversion, attachment rendering, editing, release signing, or remote automatic application updates. Browser tests cover the UI using fictional data; they do not substitute for testing native dialogs and macOS webview behavior.

@@ -120,7 +120,8 @@ pub fn run() {
             watch::watch_archive,
             watch::unwatch_archive,
             rebuild::rebuild_status,
-            rebuild::rebuild_app
+            rebuild::rebuild_app,
+            rebuild::choose_build_workspace
         ])
         .run(tauri::generate_context!())
         .expect("error while running Leaflet");
