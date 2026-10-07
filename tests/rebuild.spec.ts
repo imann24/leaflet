@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { emit } from '@tauri-apps/api/event';
 import type {} from './fixtures/desktop';
 
 test.beforeEach(async ({ page }) => {
@@ -67,7 +66,7 @@ test('native rebuild menu event opens the rebuild dialog', async ({ page }) => {
   await expect(
     page.getByRole('button', { name: 'Rebuild app', exact: true }),
   ).toBeVisible();
-  await emit('open-rebuild');
+  await page.evaluate(() => window.journalTest.openRebuildFromMenu());
   await expect(
     page.getByRole('heading', { name: 'Rebuild app', exact: true }),
   ).toBeVisible();
