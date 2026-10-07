@@ -11,6 +11,7 @@ import {
   ChevronsRight,
   Clock3,
   FolderOpen,
+  Hammer,
   Leaf,
   Maximize2,
   Minimize2,
@@ -42,6 +43,7 @@ import {
 import { Calendar } from './components/Calendar';
 import { CommandPalette } from './components/CommandPalette';
 import { EntryBody } from './components/EntryBody';
+import { RebuildDialog } from './components/RebuildDialog';
 import {
   sameArchive,
   startArchiveMonitor,
@@ -61,6 +63,7 @@ export default function App() {
   const [year, setYear] = useState('');
   const [view, setView] = useState<View>('journal');
   const [palette, setPalette] = useState(false);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
   const [focus, setFocus] = useState(false);
   const [raw, setRaw] = useState(false);
   const [fontSize, setFontSize] = useState(() =>
@@ -256,6 +259,7 @@ export default function App() {
   };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (rebuildOpen) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPalette((p) => !p);
@@ -326,6 +330,12 @@ export default function App() {
     },
     ...(desktop
       ? [
+          {
+            id: 'rebuild',
+            label: 'Rebuild app',
+            detail: 'Build your local workspace and restart Leaflet',
+            action: () => setRebuildOpen(true),
+          },
           {
             id: 'folder',
             label: 'Choose journal folder',
@@ -423,6 +433,12 @@ export default function App() {
           })}
         </div>
         <div className="sidebar-bottom">
+          {desktop && (
+            <button className="surprise" onClick={() => setRebuildOpen(true)}>
+              <Hammer size={16} />
+              Rebuild app
+            </button>
+          )}
           <button
             className="surprise"
             onClick={randomEntry}
@@ -869,6 +885,7 @@ export default function App() {
           </div>
         )}
       </main>
+      {rebuildOpen && <RebuildDialog onClose={() => setRebuildOpen(false)} />}
       {palette && (
         <CommandPalette
           entries={entries}

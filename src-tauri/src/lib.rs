@@ -1,3 +1,4 @@
+mod rebuild;
 mod watch;
 
 use serde::Serialize;
@@ -111,12 +112,15 @@ async fn load_archive(app: tauri::AppHandle, root: Option<String>) -> Result<Arc
 pub fn run() {
     tauri::Builder::default()
         .manage(watch::JournalWatchers::default())
+        .manage(rebuild::RebuildState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             load_archive,
             watch::watch_archive,
-            watch::unwatch_archive
+            watch::unwatch_archive,
+            rebuild::rebuild_status,
+            rebuild::rebuild_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running Leaflet");

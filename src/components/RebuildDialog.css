@@ -1,0 +1,62 @@
+.palette.rebuild-dialog {
+  padding: 24px;
+  overflow: auto;
+}
+.rebuild-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.rebuild-dialog h2 {
+  font-family: Georgia, serif;
+  font-size: 26px;
+}
+.rebuild-dialog p {
+  line-height: 1.65;
+  margin: 12px 0;
+}
+.rebuild-dialog label {
+  display: block;
+  margin-top: 20px;
+  font-weight: 600;
+}
+.workspace-picker {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.workspace-picker input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+}
+.rebuild-dialog .build-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+.build-log-path {
+  overflow-wrap: anywhere;
+}
+.rebuild-dialog pre {
+  background: var(--panel);
+  padding: 12px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.rebuild-dialog summary {
+  cursor: pointer;
+}
+.palette.rebuild-dialog footer {
+  padding: 16px 0 0;
+  margin-top: 20px;
+  align-items: center;
+  font-size: 12px;
+}

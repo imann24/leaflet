@@ -29,6 +29,39 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 Install the test browser once with `pnpm exec playwright install chromium`. Corepack uses the pnpm version pinned in `package.json`.
 
+## Rebuild from the macOS app
+
+Package this feature once with `pnpm tauri build --bundles app`, then open
+`src-tauri/target/release/bundle/macos/Leaflet.app` or copy it into Applications.
+An older installed version must be replaced once to gain the rebuild control.
+
+Click **Rebuild app** at the bottom of the sidebar, or use **Cmd+K → Rebuild app**.
+Choose the Leaflet workspace (defaults to the checkout that built the app), then
+click **Rebuild & restart**. The folder is remembered. The build uses the current
+checkout, including uncommitted changes; it does not pull, switch branches, or
+install workspace dependencies. Only select a workspace whose build scripts you
+trust. Keep the prerequisites above installed and run `pnpm install` after dependency
+changes.
+
+You can keep reading during the build. The dialog shows progress and the latest
+build output; the full build/install log is saved as
+`~/Library/Logs/app.leaflet.journal/local-rebuild.log`. On success, Leaflet stages
+the new bundle beside the running app, ad-hoc signs and verifies it, quits,
+replaces that app, and relaunches. No Apple developer certificate is needed.
+Existing journal preferences and bookmarks remain in place. Build failures leave
+the current app running; replacement or launch-command failures restore the
+previous bundle when possible. The installer does not detect crashes after macOS
+has accepted the launch request.
+
+This is a local macOS developer workflow. It requires a writable app location and
+is unavailable in browser previews, `pnpm desktop`, disk images, and translocated
+apps. Builds reuse a separate Cargo cache under `src-tauri/target/local-rebuild`
+and target the running app's architecture. Do not run the app directly from that
+internal cache. Finder launches use the build-time toolchain PATH plus the login
+shell environment; if you move or remove your Node/Rust toolchain, repair the
+terminal build environment first. No administrator prompt or remote release
+service is used.
+
 ## Reading
 
 - **Month browsing:** choose a year and month in the sidebar. The mini calendar jumps to a day; the list shows every entry, including multiple entries on the same date.
@@ -63,6 +96,7 @@ Pages and Word documents are not imported; use plain-text or Markdown copies of 
 
 ## Architecture and data
 
+- `src-tauri/src/rebuild.rs` and `rebuild-install.sh`: local macOS builds, staged app replacement, relaunch, and rollback.
 - `src-tauri/src/watch.rs`: native filesystem notifications with per-window subscription cleanup.
 - `src/lib/archive-monitor.ts`: debounced, serialized background refresh, fallback checks, and cancellation when changing folders.
 - `src-tauri/src/lib.rs`: asynchronous, read-only folder scan. Returns entries and per-file read warnings; no journal-writing command exists.
@@ -72,6 +106,6 @@ Pages and Word documents are not imported; use plain-text or Markdown copies of 
 - `src/App.tsx`: navigation and reader state.
 - `src/lib/demo.ts`: fictional fixtures for browser preview and tests.
 
-Journal contents stay in memory while the app is open. Only the folder path, bookmarked entry identifiers, last-opened entry, theme, and text size are saved in the webview's local storage. No personal text is copied into the repository or bundled frontend. No accounts, telemetry, remote fonts, or network search are used. Raw HTML is not executed, images appear as placeholders, and supported links open in the system browser only after a click.
+Journal contents stay in memory while the app is open. Only the folder path, bookmarked entry identifiers, last-opened entry, theme, text size, and build workspace path are saved in the webview's local storage. No personal text is copied into the repository or bundled frontend. No accounts, telemetry, remote fonts, or network search are used. Raw HTML is not executed, images appear as placeholders, and supported links open in the system browser only after a click.
 
-Use **Refresh journal** for an immediate manual reload; external changes are normally picked up automatically. Background checks compare snapshots and avoid re-rendering an unchanged archive. If the folder is temporarily unavailable, the last loaded entries remain readable while Leaflet retries. This scaffold loads the archive into memory and searches it locally; it does not yet include legacy document conversion, attachment rendering, editing, signing, or automatic application updates. Browser tests cover the UI using fictional data; they do not substitute for testing native dialogs and macOS webview behavior.
+Use **Refresh journal** for an immediate manual reload; external changes are normally picked up automatically. Background checks compare snapshots and avoid re-rendering an unchanged archive. If the folder is temporarily unavailable, the last loaded entries remain readable while Leaflet retries. This scaffold loads the archive into memory and searches it locally; it does not yet include legacy document conversion, attachment rendering, editing, release signing, or remote automatic application updates. Browser tests cover the UI using fictional data; they do not substitute for testing native dialogs and macOS webview behavior.

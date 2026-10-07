@@ -8,9 +8,30 @@ data.root = '/fictional/journal';
 let nextId = 0;
 let loads = 0;
 const subscriptions = new Set<number>();
+let rebuildCalls = 0;
+let rebuildWorkspace = '';
+const rebuildState = {
+  phase: 'idle',
+  workspace: '/fictional/leaflet',
+  unavailableReason: null as string | null,
+  error: null as string | null,
+  log: '',
+  logPath: '/fictional/logs/local-rebuild.log',
+};
 mockWindows('main');
 mockIPC(
   (command, args) => {
+    if (command === 'rebuild_status') return structuredClone(rebuildState);
+    if (command === 'rebuild_app') {
+      rebuildCalls++;
+      rebuildWorkspace = (args as { workspace: string }).workspace;
+      rebuildState.workspace = rebuildWorkspace;
+      rebuildState.phase = 'building';
+      rebuildState.error = null;
+      rebuildState.log = 'Compiling Leaflet…';
+      return null;
+    }
+    if (command === 'plugin:dialog|open') return '/fictional/Leaflet workspace';
     if (command === 'load_archive') {
       loads++;
       return structuredClone(data);
@@ -35,6 +56,15 @@ mockIPC(
 // isTauri() checks this flag independently of the IPC mock.
 Object.defineProperty(window, 'isTauri', { value: true, configurable: true });
 const harness = {
+  get rebuildCalls() {
+    return rebuildCalls;
+  },
+  get rebuildWorkspace() {
+    return rebuildWorkspace;
+  },
+  setRebuild(patch: Partial<typeof rebuildState>) {
+    Object.assign(rebuildState, patch);
+  },
   async add(entry: SourceEntry, notify = true) {
     data.entries.push(entry);
     if (notify)
