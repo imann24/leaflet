@@ -35,7 +35,8 @@ Package this feature once with `pnpm tauri build --bundles app`, then open
 `src-tauri/target/release/bundle/macos/Leaflet.app` or copy it into Applications.
 An older installed version must be replaced once to gain the rebuild control.
 
-Click **Rebuild app** at the bottom of the sidebar, or use **Cmd+K → Rebuild app**.
+Use **Leaflet → Rebuild app…**, the hammer icon at the bottom of the sidebar,
+or **Cmd+K → Rebuild app**.
 Choose the Leaflet workspace with the native folder picker, then
 click **Rebuild & restart**. The folder is remembered by the native app. Rebuilds
 only use this selection; a webview cannot submit a different build path. The build uses the current
