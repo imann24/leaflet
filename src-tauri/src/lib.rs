@@ -121,6 +121,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 let menu = Menu::default(app.handle())?;
+                let mut added_rebuild_item = false;
                 for item in menu.items()? {
                     if let Some(submenu) = item.as_submenu() {
                         if submenu.text()? == app.package_info().name {
@@ -131,13 +132,18 @@ pub fn run() {
                                 true,
                                 None::<&str>,
                             )?;
+                            // The default Leaflet menu starts with About and a separator.
                             submenu.insert_items(
                                 &[&rebuild, &PredefinedMenuItem::separator(app)?],
                                 2,
                             )?;
+                            added_rebuild_item = true;
                             break;
                         }
                     }
+                }
+                if !added_rebuild_item {
+                    eprintln!("Could not add Rebuild app to the Leaflet menu: submenu not found");
                 }
                 app.set_menu(menu)?;
             }

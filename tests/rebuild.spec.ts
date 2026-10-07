@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { emit } from '@tauri-apps/api/event';
 import type {} from './fixtures/desktop';
 
 test.beforeEach(async ({ page }) => {
@@ -60,6 +61,16 @@ test('rebuild remembers the workspace and stays busy across closing and reopenin
   await expect
     .poll(() => page.evaluate(() => window.journalTest.rebuildCalls))
     .toBe(2);
+});
+
+test('native rebuild menu event opens the rebuild dialog', async ({ page }) => {
+  await expect(
+    page.getByRole('button', { name: 'Rebuild app', exact: true }),
+  ).toBeVisible();
+  await emit('open-rebuild');
+  await expect(
+    page.getByRole('heading', { name: 'Rebuild app', exact: true }),
+  ).toBeVisible();
 });
 
 test('command palette opens rebuild and unavailable runtimes cannot start it', async ({
