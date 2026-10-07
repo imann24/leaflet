@@ -3,7 +3,9 @@ mod watch;
 
 use serde::Serialize;
 use std::{fs, path::PathBuf};
-use tauri::Manager;
+#[cfg(target_os = "macos")]
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::{Emitter, Manager};
 
 #[derive(Serialize)]
 struct Entry {
@@ -115,6 +117,46 @@ pub fn run() {
         .manage(rebuild::RebuildState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                let menu = Menu::default(app.handle())?;
+                let mut added_rebuild_item = false;
+                for item in menu.items()? {
+                    if let Some(submenu) = item.as_submenu() {
+                        if submenu.text()? == app.package_info().name {
+                            let rebuild = MenuItem::with_id(
+                                app,
+                                "rebuild",
+                                "Rebuild app…",
+                                true,
+                                None::<&str>,
+                            )?;
+                            // The default Leaflet menu starts with About and a separator.
+                            submenu.insert_items(
+                                &[&rebuild, &PredefinedMenuItem::separator(app)?],
+                                2,
+                            )?;
+                            added_rebuild_item = true;
+                            break;
+                        }
+                    }
+                }
+                if !added_rebuild_item {
+                    eprintln!("Could not add Rebuild app to the Leaflet menu: submenu not found");
+                }
+                app.set_menu(menu)?;
+            }
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "rebuild" {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_focus();
+                    let _ = window.emit("open-rebuild", ());
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             load_archive,
             watch::watch_archive,

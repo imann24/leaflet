@@ -119,6 +119,9 @@ const harness = {
   get subscriptions() {
     return subscriptions.size;
   },
+  async openRebuildFromMenu() {
+    await emit('open-rebuild');
+  },
 };
 Object.assign(window, { journalTest: harness });
 declare global {

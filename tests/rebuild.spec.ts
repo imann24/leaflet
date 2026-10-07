@@ -62,6 +62,16 @@ test('rebuild remembers the workspace and stays busy across closing and reopenin
     .toBe(2);
 });
 
+test('native rebuild menu event opens the rebuild dialog', async ({ page }) => {
+  await expect(
+    page.getByRole('button', { name: 'Rebuild app', exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => window.journalTest.openRebuildFromMenu());
+  await expect(
+    page.getByRole('heading', { name: 'Rebuild app', exact: true }),
+  ).toBeVisible();
+});
+
 test('command palette opens rebuild and unavailable runtimes cannot start it', async ({
   page,
 }) => {

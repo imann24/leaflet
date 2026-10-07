@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { listen } from '@tauri-apps/api/event';
 import {
   chooseArchive,
   desktop,
@@ -149,6 +150,13 @@ export default function App() {
   useEffect(() => {
     void load(readPreference<string>('root', ''));
   }, [load]);
+  useEffect(() => {
+    if (!desktop) return;
+    const unlisten = listen('open-rebuild', () => setRebuildOpen(true));
+    return () => {
+      void unlisten.then((stop) => stop());
+    };
+  }, []);
   useEffect(() => {
     if (!desktop || !rootKey || busy) return;
     setSyncError(null);
@@ -433,12 +441,6 @@ export default function App() {
           })}
         </div>
         <div className="sidebar-bottom">
-          {desktop && (
-            <button className="surprise" onClick={() => setRebuildOpen(true)}>
-              <Hammer size={16} />
-              Rebuild app
-            </button>
-          )}
           <button
             className="surprise"
             onClick={randomEntry}
@@ -467,6 +469,15 @@ export default function App() {
                     : 'Auto-refresh · 1 min'
                 : 'Demo journal'}
             </span>
+            {desktop && (
+              <button
+                title="Rebuild app"
+                aria-label="Rebuild app"
+                onClick={() => setRebuildOpen(true)}
+              >
+                <Hammer size={14} />
+              </button>
+            )}
             <button
               title="Refresh journal"
               aria-label="Refresh journal"
