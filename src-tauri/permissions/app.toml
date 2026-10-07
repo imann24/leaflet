@@ -1,0 +1,10 @@
+# Declaring app permissions opts custom commands into Tauri's ACL.
+[[permission]]
+identifier = "allow-journal"
+description = "Read and watch the journal from the main window."
+commands.allow = ["load_archive", "watch_archive", "unwatch_archive"]
+
+[[permission]]
+identifier = "allow-local-rebuild"
+description = "Select a local workspace, inspect its build, and rebuild from the main window."
+commands.allow = ["choose_build_workspace", "rebuild_status", "rebuild_app"]

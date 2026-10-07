@@ -31,5 +31,6 @@ notify = "8"
 codegen-units = 1
 lto = true
 opt-level = 3
-panic = "abort"
+# Rebuild workers catch panics and restore a retryable status.
+panic = "unwind"
 strip = true
