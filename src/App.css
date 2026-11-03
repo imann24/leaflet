@@ -529,7 +529,7 @@ kbd,
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 9px;
+  font-size: 14px;
   letter-spacing: 1.7px;
   text-transform: uppercase;
   color: var(--accent);
@@ -564,10 +564,10 @@ kbd,
   padding: 5px 8px;
   background: var(--tint);
   border-radius: 5px;
-  font-size: 11px;
+  font-size: 16px;
 }
 .rating > span {
-  font-size: 9px;
+  font-size: 13px;
   opacity: 0.6;
 }
 .entry-rule {

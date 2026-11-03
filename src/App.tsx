@@ -820,7 +820,7 @@ export default function App() {
                       <span>{entry.words.toLocaleString()} words</span>
                       {entry.rating !== null && (
                         <span className="rating">
-                          <Sun size={13} />
+                          <Sun size={16} />
                           {entry.rating}
                           <span>/ 10</span>
                         </span>
