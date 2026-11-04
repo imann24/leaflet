@@ -503,13 +503,17 @@ export default function App() {
       </aside>
       <main>
         <header className="topbar">
-          <div>
-            <span className="breadcrumb">Your journal</span>
-            <ChevronRight size={13} />
-            <strong>
-              {view === 'calendar' ? 'Calendar' : collectionTitle}
-            </strong>
-          </div>
+          {focus && view !== 'calendar' && entry && !busy ? (
+            <EntryHeading entry={entry} />
+          ) : (
+            <div>
+              <span className="breadcrumb">Your journal</span>
+              <ChevronRight size={13} />
+              <strong>
+                {view === 'calendar' ? 'Calendar' : collectionTitle}
+              </strong>
+            </div>
+          )}
           <div className="topbar-actions">
             {!desktop && <span className="demo-badge">Fictional demo</span>}
             <button
@@ -797,36 +801,12 @@ export default function App() {
               <div className="reader-scroll" ref={reader}>
                 {entry ? (
                   <article className="entry-content">
-                    <div className="entry-kicker">
-                      <span className="tiny-line" />
-                      {entry.date
-                        ? dateValue(entry.date).toLocaleDateString('en-US', {
-                            weekday: 'long',
-                          })
-                        : 'A NOTE TO REMEMBER'}
-                    </div>
-                    <h1>{entry.title.replace(/, \d{4}/, '')}</h1>
-                    <div className="entry-meta">
-                      <span>
-                        {entry.date
-                          ? dateValue(entry.date).toLocaleDateString('en-US', {
-                              month: 'long',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-                          : monthLabel(entry.month)}
-                      </span>
-                      <span>·</span>
-                      <span>{entry.words.toLocaleString()} words</span>
-                      {entry.rating !== null && (
-                        <span className="rating">
-                          <Sun size={16} />
-                          {entry.rating}
-                          <span>/ 10</span>
-                        </span>
-                      )}
-                    </div>
-                    <div className="entry-rule" />
+                    {!focus && (
+                      <>
+                        <EntryHeading entry={entry} />
+                        <div className="entry-rule" />
+                      </>
+                    )}
                     <div className="prose" style={{ fontSize }}>
                       {raw ? (
                         <pre className="raw-text">{entry.content}</pre>
@@ -910,4 +890,40 @@ export default function App() {
 }
 function ArrowUpSmall() {
   return <span aria-hidden="true">↗</span>;
+}
+
+function EntryHeading({ entry }: { entry: Entry }) {
+  return (
+    <div className="entry-heading">
+      <div className="entry-kicker">
+        <span className="tiny-line" />
+        {entry.date
+          ? dateValue(entry.date).toLocaleDateString('en-US', {
+              weekday: 'long',
+            })
+          : 'A NOTE TO REMEMBER'}
+      </div>
+      <h1>{entry.title.replace(/, \d{4}/, '')}</h1>
+      <div className="entry-meta">
+        <span>
+          {entry.date
+            ? dateValue(entry.date).toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : monthLabel(entry.month)}
+        </span>
+        <span>·</span>
+        <span>{entry.words.toLocaleString()} words</span>
+        {entry.rating !== null && (
+          <span className="rating">
+            <Sun size={16} />
+            {entry.rating}
+            <span>/ 10</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
