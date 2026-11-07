@@ -504,6 +504,101 @@ mod macos {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        fn build_fixture(pnpm_location: &str, build_exit: i32, enable_exit: i32) {
+            use std::os::unix::fs::PermissionsExt;
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let root = std::env::temp_dir()
+                .join(format!("leaflet build ' $ {}-{nonce}", std::process::id()));
+            let bin = root.join("bin");
+            let temporary = root.join("tmp");
+            let pnpm_home = root.join("custom pnpm");
+            for dir in [&bin, &temporary, &pnpm_home, &root.join("Library/pnpm/bin")] {
+                fs::create_dir_all(dir).unwrap();
+            }
+            let executable = |path: &Path, contents: &str| {
+                fs::write(path, contents).unwrap();
+                fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+            };
+            // Reproduce Tauri's separate shell, which must resolve pnpm itself.
+            let pnpm = r#"#!/bin/sh
+if [ "$1" = exec ]; then
+    [ "$PWD" = "$LEAFLET_WORKSPACE" ] || exit 81
+    [ "$*" = "exec tauri build --bundles app --target test-target" ] || exit 82
+    exec /bin/sh -c 'pnpm build'
+fi
+[ "$1" = build ] || exit 83
+echo frontend-built
+exit "$BUILD_EXIT"
+"#;
+            executable(&bin.join("node"), "#!/bin/sh\nexit 0\n");
+            executable(&root.join("pnpm-template"), pnpm);
+            executable(
+                &bin.join("corepack"),
+                r#"#!/bin/sh
+[ "$1" = enable ] && [ "$2" = --install-directory ] && [ "$4" = pnpm ] || exit 84
+echo enabling-corepack
+[ "$ENABLE_EXIT" = 0 ] || exit "$ENABLE_EXIT"
+/bin/cp "$TEST_ROOT/pnpm-template" "$3/pnpm"
+"#,
+            );
+            if !pnpm_location.is_empty() {
+                executable(&root.join(pnpm_location).join("pnpm"), pnpm);
+            }
+            // Isolate discovery from the machine's Homebrew/global installations.
+            // HOME below belongs only to this child process's temporary fixture.
+            let script =
+                include_str!("rebuild-build.sh").replace("/opt/homebrew/bin:/usr/local/bin:", "");
+            let output = Command::new("/bin/zsh")
+                .args(["-dfc", &script])
+                .env_clear()
+                .env("HOME", &root)
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .env("PNPM_HOME", &pnpm_home)
+                .env("TMPDIR", &temporary)
+                .env("TEST_ROOT", &root)
+                .env("LEAFLET_WORKSPACE", &root)
+                .env("LEAFLET_BUILD_TARGET", "test-target")
+                .env("BUILD_EXIT", build_exit.to_string())
+                .env("ENABLE_EXIT", enable_exit.to_string())
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(if enable_exit != 0 {
+                    enable_exit
+                } else {
+                    build_exit
+                }),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert_eq!(stdout.contains("frontend-built"), enable_exit == 0);
+            assert_eq!(
+                stdout.contains("enabling-corepack"),
+                pnpm_location.is_empty()
+            );
+            assert_eq!(fs::read_dir(&temporary).unwrap().count(), 0);
+            fs::remove_dir_all(root).unwrap();
+        }
+
+        #[test]
+        fn build_discovers_pnpm_home_and_standalone_bin() {
+            build_fixture("custom pnpm", 0, 0);
+            build_fixture("Library/pnpm/bin", 0, 0);
+        }
+
+        #[test]
+        fn build_corepack_shim_reaches_child_shell_and_is_cleaned_up() {
+            build_fixture("", 0, 0);
+            build_fixture("", 42, 0);
+            build_fixture("", 0, 43);
+        }
+
         // Exercise the actual detached installer with fake app contents and a fake
         // LaunchServices command. Never replace or launch the user's installed app.
         fn install_fixture(failure: &str) {

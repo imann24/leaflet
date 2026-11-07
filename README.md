@@ -61,8 +61,9 @@ is unavailable in browser previews, `pnpm desktop`, disk images, and translocate
 apps. Builds reuse a separate Cargo cache under `src-tauri/target/local-rebuild`
 and target the running app's architecture. Do not run the app directly from that
 internal cache. Finder launches discover tools from the current user's login shell,
-standard Cargo/Homebrew/pnpm locations, and nvm's selected/default Node version.
-Corepack is used if a pnpm shim is unavailable. No build-machine PATH is embedded
+standard Cargo/Homebrew/pnpm locations, `PNPM_HOME`, and nvm's selected/default Node version.
+If pnpm is unavailable, Corepack creates temporary shims for the build and its
+child commands, including the frontend build, then removes them. No build-machine PATH is embedded
 in the app. If tools cannot be found, fix your login-shell environment first. No administrator prompt or remote release
 service is used.
 
