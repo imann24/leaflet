@@ -520,6 +520,43 @@ kbd,
   flex: 1;
   scrollbar-width: thin;
 }
+.entry-find {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-block: 1px solid var(--border);
+  color: var(--muted);
+}
+.entry-find input {
+  flex: 1;
+  width: 120px;
+  min-width: 80px;
+  padding: 7px 9px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--bg);
+}
+.entry-find [role='status'] {
+  min-width: 68px;
+  text-align: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.prose mark[data-entry-match] {
+  color: inherit;
+  background: #e9ce7580;
+  border-radius: 2px;
+}
+.prose mark[data-active='true'] {
+  background: #e9bc46;
+  color: #282315;
+  outline: 2px solid #997419;
+}
 .entry-content {
   max-width: 720px;
   padding: 39px 60px 30px;
