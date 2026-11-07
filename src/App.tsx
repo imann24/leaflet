@@ -44,6 +44,8 @@ import {
 import { Calendar } from './components/Calendar';
 import { CommandPalette } from './components/CommandPalette';
 import { EntryBody } from './components/EntryBody';
+import { EntryFind } from './components/EntryFind';
+import { HighlightedText } from './components/HighlightedText';
 import { RebuildDialog } from './components/RebuildDialog';
 import {
   sameArchive,
@@ -67,6 +69,10 @@ export default function App() {
   const [rebuildOpen, setRebuildOpen] = useState(false);
   const [focus, setFocus] = useState(false);
   const [raw, setRaw] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const findInput = useRef<HTMLInputElement>(null);
+  const prose = useRef<HTMLDivElement>(null);
   const [fontSize, setFontSize] = useState(() =>
     readPreference('fontSize', 18),
   );
@@ -140,6 +146,8 @@ export default function App() {
       setBookmarks(readPreference<string[]>(`bookmarks:${data.root}`, []));
       setView('journal');
       setFocus(false);
+      setFindOpen(false);
+      setFindQuery('');
       if (desktop) savePreference('root', data.root);
     } catch (e) {
       if (request === requestId.current) setError(String(e));
@@ -206,7 +214,10 @@ export default function App() {
     if (selected && rootKey) savePreference(`last:${rootKey}`, selected);
   }, [selected, rootKey]);
   useEffect(() => {
-    reader.current?.scrollTo({ top: 0 });
+    const firstMatch = reader.current?.querySelector('[data-entry-match]');
+    if (firstMatch)
+      firstMatch.scrollIntoView({ block: 'center', inline: 'nearest' });
+    else reader.current?.scrollTo({ top: 0 });
     setRaw(false);
     document
       .querySelector('.entry-card.selected')
@@ -227,6 +238,7 @@ export default function App() {
   const changeView = (v: View) => {
     setView(v);
     setFocus(false);
+    if (v === 'calendar') closeFind();
     if (v === 'bookmarks')
       setSelected(entries.find((e) => bookmarks.includes(e.id))?.id ?? '');
     if (v === 'anniversary')
@@ -265,16 +277,49 @@ export default function App() {
     if (entries.length)
       openEntry(entries[Math.floor(Math.random() * entries.length)]);
   };
+  const closeFind = () => {
+    setFindOpen(false);
+    setFindQuery('');
+  };
+  const openFind = () => {
+    setFindOpen(true);
+    findInput.current?.focus();
+    findInput.current?.select();
+  };
+  useEffect(() => {
+    if (!entry) {
+      setFindOpen(false);
+      setFindQuery('');
+    }
+  }, [entry]);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (rebuildOpen) return;
+      if (rebuildOpen || e.isComposing) return;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPalette((p) => !p);
         return;
       }
+      if (palette) return;
       if (
-        palette ||
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === 'f' &&
+        entry &&
+        view !== 'calendar' &&
+        !busy
+      ) {
+        e.preventDefault();
+        openFind();
+        return;
+      }
+      if (e.key === 'Escape' && findOpen) {
+        e.preventDefault();
+        closeFind();
+        return;
+      }
+      if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLSelectElement ||
         e.target instanceof HTMLTextAreaElement
@@ -743,6 +788,16 @@ export default function App() {
                 </span>
                 <div>
                   <button
+                    className={`icon-button ${findOpen ? 'toggled' : ''}`}
+                    aria-label="Find in entry"
+                    title="Find in entry (⌘F / Ctrl+F)"
+                    aria-expanded={findOpen}
+                    disabled={!entry}
+                    onClick={openFind}
+                  >
+                    <Search size={17} />
+                  </button>
+                  <button
                     className={`icon-button ${raw ? 'toggled' : ''}`}
                     aria-label={
                       raw ? 'Show rendered entry' : 'Show original text'
@@ -798,6 +853,16 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              {findOpen && entry && (
+                <EntryFind
+                  query={findQuery}
+                  onQuery={setFindQuery}
+                  onClose={closeFind}
+                  content={prose}
+                  input={findInput}
+                  revision={`${rootKey}\u0000${entry.id}\u0000${raw}\u0000${entry.content}`}
+                />
+              )}
               <div className="reader-scroll" ref={reader}>
                 {entry ? (
                   <article className="entry-content">
@@ -807,11 +872,20 @@ export default function App() {
                         <div className="entry-rule" />
                       </>
                     )}
-                    <div className="prose" style={{ fontSize }}>
+                    <div className="prose" style={{ fontSize }} ref={prose}>
                       {raw ? (
-                        <pre className="raw-text">{entry.content}</pre>
+                        <pre className="raw-text">
+                          <HighlightedText
+                            text={entry.content}
+                            query={findOpen ? findQuery : ''}
+                          />
+                        </pre>
                       ) : (
-                        <EntryBody body={entry.body} onError={setError} />
+                        <EntryBody
+                          body={entry.body}
+                          onError={setError}
+                          query={findOpen ? findQuery : ''}
+                        />
                       )}
                     </div>
                     <div className="entry-end">
