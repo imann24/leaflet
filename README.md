@@ -2,6 +2,27 @@
 
 A quiet, local desktop reader for revisiting a plain-text journal. Built with Tauri 2, React, TypeScript, and Vite. Uses **pnpm**.
 
+![Leaflet in light mode, with month navigation, a mini calendar, and a journal entry open for reading.](docs/screenshots/reader-light.png)
+
+Browse a month at a time, then settle into an entry. All screenshots use the browser preview's fictional demo journal.
+
+<details>
+<summary>More screenshots: search and dark focus mode</summary>
+
+### Find a memory
+
+Search across dates, filenames, and journal text with **Cmd+K / Ctrl+K**.
+
+![Leaflet's search palette showing journal entries matching “coffee.”](docs/screenshots/search.png)
+
+### Room to reflect
+
+Dark focus mode keeps the daily Gratitude, Forgiveness, and Curiosity cards in view.
+
+![Leaflet in dark focus mode, displaying all nine items in the daily reflection cards.](docs/screenshots/reflection-dark.png)
+
+</details>
+
 ## Run
 
 Prerequisites: Node.js 20.19+ (or 22.12+), pnpm via Corepack, stable Rust, and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/). On macOS, Xcode command-line tools are required.
